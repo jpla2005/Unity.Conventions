@@ -16,7 +16,7 @@ namespace Unity.Conventions
 
         #region Properties
 
-        private static IUnityContainer Container
+        public static IUnityContainer Container
         {
             get { return _container ?? (_container = CreateContainer()); }
         }
