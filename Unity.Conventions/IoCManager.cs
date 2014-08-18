@@ -26,54 +26,59 @@ namespace Unity.Conventions
         private static IUnityContainer CreateContainer()
         {
             var ass = System.Reflection.Assembly.GetAssembly(typeof(IoCManager));
-            var path = new Uri(ass.CodeBase.Substring(0, ass.CodeBase.LastIndexOf("/", StringComparison.Ordinal))).AbsolutePath;
+            var uri = new Uri(ass.CodeBase.Substring(0, ass.CodeBase.LastIndexOf("/", StringComparison.Ordinal)));
+            var path = uri.LocalPath;
             var ext = new AssemblyNamingConventionScanExtension(path);
 
-            var inp = new FileStream(Path.Combine(path, "ioc.config"), FileMode.Open);
-
-            try
+            var fullPath = Path.Combine(path, "ioc.config");
+            var container = new UnityContainer();
+            if (File.Exists(fullPath))
             {
-                var root = XElement.Load(inp);
-                var conventions = root.Elements("NamingConvention");
-                foreach (var convention in conventions)
-                {
-                    var type = convention.Attribute("type");
-                    if (type != null)
-                    {
-                        var convType = Type.GetType(type.Value);
-                        if (convType != null)
-                        {
-                            var obj = Activator.CreateInstance(convType);
-                            var conv = obj as NamingConvention;
-                            if (conv != null)
-                            {
-                                var assemblies = convention.Elements("Assembly").Select(asm =>
-                                    new Assembly
-                                    {
-                                        Name = asm.Attribute("name").Value,
-                                        FullName = asm.Attribute("fullname").Value
-                                    });
+                var inp = new FileStream(fullPath, FileMode.Open);
 
-                                conv.Assemblies = assemblies;
-                                ext.RegisterNamingConvention(conv);
+                try
+                {
+                    var root = XElement.Load(inp);
+                    var conventions = root.Elements("NamingConvention");
+                    foreach (var convention in conventions)
+                    {
+                        var type = convention.Attribute("type");
+                        if (type != null)
+                        {
+                            var convType = Type.GetType(type.Value);
+                            if (convType != null)
+                            {
+                                var obj = Activator.CreateInstance(convType);
+                                var conv = obj as NamingConvention;
+                                if (conv != null)
+                                {
+                                    var assemblies = convention.Elements("Assembly").Select(asm =>
+                                        new Assembly
+                                        {
+                                            Name = asm.Attribute("name").Value,
+                                            FullName = asm.Attribute("fullname").Value
+                                        });
+
+                                    conv.Assemblies = assemblies;
+                                    ext.RegisterNamingConvention(conv);
+                                }
                             }
                         }
                     }
+                    
+                    container.AddExtension(ext);
                 }
+                catch (Exception)
+                {
+                    throw new IoCException("IoC configuration corrupted");
+                }
+                finally
+                {
+                    inp.Close();
+                }
+            }
 
-                var container = new UnityContainer();
-                container.AddExtension(ext);
-
-                return container;
-            }
-            catch (Exception)
-            {
-                throw new IoCException("IoC configuration corrupted");
-            }
-            finally
-            {
-                inp.Close();
-            }
+            return container;
         }
 
         public static void Register<TInterface, TClass>() where TClass : TInterface
